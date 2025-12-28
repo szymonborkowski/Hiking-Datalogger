@@ -6,6 +6,7 @@ Contains a number of methods that extract information of interest from the txt f
 
 import matplotlib.pyplot as plt
 import os
+import math
 
 def filter_nmea_sentences_by_prefix(input_filename, output_filename, sentence_prefix):
     try:
@@ -155,14 +156,119 @@ def plot_gpvtg_speed(input_file):
     except Exception as e:
         print(f"An error occurred: {e}")
 
+def nmea_to_decimal(value, direction):
+    """
+    Converts NMEA format (DDMM.MMMM) to decimal degrees (DD.DDDD).
+    Example: 4807.038 becomes 48 + (07.038 / 60) = 48.1173
+    """
+    try:
+        # NMEA format is [Degrees][Minutes].[Decimals]
+        # Assume the last two whole digits before the decimal are minutes.
+        
+        # Ensure the value is a float
+        val_float = float(value)
+        
+        # Separate degrees from minutes
+        degrees = int(val_float / 100)
+        minutes = val_float - (degrees * 100)
+        
+        decimal_degrees = degrees + (minutes / 60)
+        
+        # Handle Hemisphere
+        if direction.upper() in ['S', 'W']:
+            decimal_degrees *= -1
+            
+        return decimal_degrees
+    except ValueError:
+        return None
+
+def haversine_distance(lat1, lon1, lat2, lon2):
+    """
+    Calculates distance between two points on Earth in Meters.
+    """
+    R = 6371000  # radius of Earth in meters
+    
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    delta_phi = math.radians(lat2 - lat1)
+    delta_lambda = math.radians(lon2 - lon1)
+    
+    a = math.sin(delta_phi / 2.0)**2 + \
+        math.cos(phi1) * math.cos(phi2) * \
+        math.sin(delta_lambda / 2.0)**2
+    
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    
+    return R * c
+
+def process_gps_data(input_file):
+    total_distance = 0.0
+    previous_point = None  # Tuple (lat, lon)
+
+    with open(input_file, 'r') as infile:
+        for sentence in infile:
+            parts = sentence.split(',')
+            
+            # 1. Basic format check
+            if not sentence.startswith('$GPRMC'):
+                continue
+                
+            # 2. Check for incomplete sentences (Standard GPRMC has ~12 fields)
+            if len(parts) < 10:
+                continue
+
+            # 3. Check 'Status' flag (Index 2). 'A' = Active (Valid), 'V' = Void (Invalid)
+            status = parts[2]
+            if status != 'A':
+                continue
+                
+            # 4. Extract and convert coordinates
+            # Index 3: Lat, Index 4: N/S, Index 5: Lon, Index 6: E/W
+            try:
+                raw_lat = parts[3]
+                lat_dir = parts[4]
+                raw_lon = parts[5]
+                lon_dir = parts[6]
+                
+                # Skip if fields are empty strings
+                if not raw_lat or not raw_lon:
+                    continue
+
+                current_lat = nmea_to_decimal(raw_lat, lat_dir)
+                current_lon = nmea_to_decimal(raw_lon, lon_dir)
+                
+                # 5. Calculate Distance
+                added_dist = 0.0
+                if previous_point is not None:
+                    added_dist = haversine_distance(previous_point[0], previous_point[1], 
+                                                    current_lat, current_lon)
+                    
+                    # Noise Threshold
+                    # Ignore tiny movements (e.g., < 1 meter) to reduce GPS drift errors (modify as required)
+                    if added_dist > 1.0: 
+                        total_distance += added_dist
+                    else:
+                        added_dist = 0.0 # Treat as noise
+                
+                # Update previous point
+                previous_point = (current_lat, current_lon)
+
+            except Exception as e:
+                print(f"ERROR - Parse Failed: {e}")
+                continue
+
+        return total_distance
+
 
 if __name__ == "__main__":
         
-    filter_nmea_sentences_by_prefix("car_journey.txt", "output_1.txt", "$GPVTG")
+    # Change prefix based on requirements
+    filter_nmea_sentences_by_prefix("athlone_journey.txt", "output_coords.txt", "$GPRMC")
 
+    # Speed data parsing:
     extract_gpvtg_speed("output_1.txt", "output_2.txt")
-
     top_speed("output_2.txt")
-
     plot_gpvtg_speed("output_1.txt")
 
+    # Total distance parsing:
+    total = process_gps_data("output_coords.txt")
