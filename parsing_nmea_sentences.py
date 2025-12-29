@@ -268,18 +268,7 @@ def process_gps_data(input_file):
 
         return total_distance
 
-def elapsed_time(gprmc_logs_file):
-    with open(gprmc_logs_file, 'r') as file:
-        lines = file.readlines()
-        
-        first_line_time = (lines[0].split(','))[1]
-        last_line_time = (lines[-1].split(','))[1]
-
-        print(first_line_time)
-        print(last_line_time)
-        print(float(last_line_time) - float(first_line_time))
-
-def convert_gprmc_to_datetime(gprmc_logs_file):
+def elapsed_time_gprmc_file(gprmc_logs_file):
     with open(gprmc_logs_file, 'r') as file:
         lines = file.readlines()
         
@@ -293,6 +282,9 @@ def convert_gprmc_to_datetime(gprmc_logs_file):
 
         print(datetime_1)
         print(datetime_2)
+
+        difference = datetime_2 - datetime_1
+        print(difference)
 
 def gprmc_to_datetime(time, date):
     # Parse Time (HH, MM, SS)
@@ -315,7 +307,7 @@ if __name__ == "__main__":
     # Change prefix based on requirements
     filter_nmea_sentences_by_prefix("journey.txt", "output_coords.txt", "$GPRMC")
 
-    convert_gprmc_to_datetime("output_coords.txt")
+    elapsed_time_gprmc_file("output_coords.txt")
 
     # # Speed data parsing:
     # extract_gpvtg_speed("output_1.txt", "output_2.txt")
