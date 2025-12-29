@@ -7,10 +7,11 @@ Contains a number of methods that extract information of interest from the txt f
 import matplotlib.pyplot as plt
 import os
 import math
+from datetime import datetime, timezone
 
 def filter_nmea_sentences_by_prefix(input_filename, output_filename, sentence_prefix):
     try:
-        # 1. Read and Filter
+        # Read and Filter
         with open(input_filename, 'r') as infile:
             # Use a list comprehension to read all lines and filter them
             # .strip() removes any leading/trailing whitespace, including newline
@@ -20,8 +21,16 @@ def filter_nmea_sentences_by_prefix(input_filename, output_filename, sentence_pr
                 for line in infile
                 if line.strip().startswith(sentence_prefix)
             ]
+        
+        # If parsing GPRMC filter out lines without a fix
+        if sentence_prefix == "$GPRMC":
+            # This creates a new list, keeping only valid, complete 'A' status lines
+            filtered_lines = [
+                line for line in filtered_lines 
+                if len(line.split(',')) >= 10 and line.split(',')[2] == 'A'
+            ]
 
-        # 2. Write to Output File
+        # Write to Output File
         if filtered_lines:
             # We add the newline character back when writing to the file
             output_content = '\n'.join(filtered_lines) + '\n'
@@ -259,16 +268,59 @@ def process_gps_data(input_file):
 
         return total_distance
 
+def elapsed_time(gprmc_logs_file):
+    with open(gprmc_logs_file, 'r') as file:
+        lines = file.readlines()
+        
+        first_line_time = (lines[0].split(','))[1]
+        last_line_time = (lines[-1].split(','))[1]
+
+        print(first_line_time)
+        print(last_line_time)
+        print(float(last_line_time) - float(first_line_time))
+
+def convert_gprmc_to_datetime(gprmc_logs_file):
+    with open(gprmc_logs_file, 'r') as file:
+        lines = file.readlines()
+        
+        first_line_time = (lines[0].split(','))[1]
+        first_line_date = (lines[0].split(','))[9]
+        last_line_time = (lines[-1].split(','))[1]
+        last_line_date = (lines[-1].split(','))[9]
+
+        datetime_1 = gprmc_to_datetime(first_line_time, first_line_date)
+        datetime_2 = gprmc_to_datetime(last_line_time, last_line_date)
+
+        print(datetime_1)
+        print(datetime_2)
+
+def gprmc_to_datetime(time, date):
+    # Parse Time (HH, MM, SS)
+    # We slice the string because the format is fixed width
+    hour = int(time[0:2])
+    minute = int(time[2:4])
+    second = int(time[4:6])
+    
+    # Parse Date (DD, MM, YY)
+    day = int(date[0:2])
+    month = int(date[2:4])
+    year = int("20" + date[4:6]) # GPS uses 2-digit year (e.g. 24 -> 2024)
+
+    # Create a Python datetime object (Timezone aware: UTC)
+    dt = datetime(year, month, day, hour, minute, second, tzinfo=timezone.utc)
+    return dt
 
 if __name__ == "__main__":
         
     # Change prefix based on requirements
-    filter_nmea_sentences_by_prefix("athlone_journey.txt", "output_coords.txt", "$GPRMC")
+    filter_nmea_sentences_by_prefix("journey.txt", "output_coords.txt", "$GPRMC")
 
-    # Speed data parsing:
-    extract_gpvtg_speed("output_1.txt", "output_2.txt")
-    top_speed("output_2.txt")
-    plot_gpvtg_speed("output_1.txt")
+    convert_gprmc_to_datetime("output_coords.txt")
 
-    # Total distance parsing:
-    total = process_gps_data("output_coords.txt")
+    # # Speed data parsing:
+    # extract_gpvtg_speed("output_1.txt", "output_2.txt")
+    # top_speed("output_2.txt")
+    # plot_gpvtg_speed("output_1.txt")
+
+    # # Total distance parsing:
+    # total = process_gps_data("output_coords.txt")
